@@ -28,7 +28,7 @@ static void ReflectiveLoader()
 {
 	unsigned char *IP;
 	void *MyBaseAddr;
-    unsigned char *libcBaseAddr, *libcBaseAddrEnd;
+    	unsigned char *libcBaseAddr, *libcBaseAddrEnd;
 	void *libcMapped = NULL;
 	int success = 0, counter = 0;
 	unsigned char *SH_STRTAB = NULL;
@@ -108,14 +108,14 @@ static void ReflectiveLoader()
 	myElfHeader = (void *)IP;
 
 	//Do a few minor checks on the ELF header
-    if (myElfHeader->e_ident[EI_VERSION] != EV_CURRENT) 
+    	if (myElfHeader->e_ident[EI_VERSION] != EV_CURRENT) 
 	{
 		return;
-    }
-    if (myElfHeader->e_type != ET_EXEC && myElfHeader->e_type != ET_DYN) 
+        }
+        if (myElfHeader->e_type != ET_EXEC && myElfHeader->e_type != ET_DYN) 
 	{
 		return;
-    }
+    	}
 
 	//open /proc/self/maps so we can find the base address of libc
 	fd = linux_open(&x[0],  0, 0);
@@ -133,12 +133,8 @@ static void ReflectiveLoader()
 	}
 
 	//String parsing without a C library..
-
 	for(;;)
 	{
-		printf("ROUND %d\n", test);
-		test++;
-
 		pos = &buf;
 		len = 0;
 
@@ -154,12 +150,12 @@ static void ReflectiveLoader()
 			break;	
 		}
 
-       pos = &buf;
-	   begin = pos;
+           	pos = &buf;
+	   	begin = pos;
 	   
-	   //parse a single entry in the list
-	   for(int i = 0; i < len; i++)
-	   {
+	   	//parse a single entry in the list
+	   	for(int i = 0; i < len; i++)
+	   	{
 
 			//find start address of the library
 			if(*pos == '-' && startBaseAddr == NULL)
@@ -259,7 +255,7 @@ static void ReflectiveLoader()
 			pos++;
  		}		
 
-	    //found libc text section now we can parse it
+	    	//found libc text section now we can parse it
 		if(success == 1)
 		{
 
@@ -368,7 +364,7 @@ static void ReflectiveLoader()
 	if(fd == -1)
 	{
 		printf("Failed to open libc file on disk..");
-		return;
+		return; 
 	}
 
 	printf("%s\n", startLibName);
@@ -417,7 +413,7 @@ static void ReflectiveLoader()
 
 	//Perform relocations on binary
 
-	//Store linkmap pointer in GOT[1] and _dl_runtime_resolve in GOT[2] of program
+	//Store linkmap pointer in GOT[1] and _dl_runtime_resolve in GOT[2] of mapped program
 
 	//unmap mapped libc on disk file
 
