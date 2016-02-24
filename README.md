@@ -26,7 +26,7 @@ TODO
 EHH maybe not these.. unless someone really wants to add them in
 
 15. Investigate hollowing out another process/library and then placing code into there so heap memory is not RWX! In some places)
-16. Destroy/obfuscate elf header to prevent scanning for ELF magic, etc.?!?!?!. Seems too advanced/malicious for a proof of concept so probably not, but if you implement it and want to add it in then sure why not I guess.. Same with 15 also
+16. Destroy/obfuscate elf header to prevent scanning for ELF magic, etc.?!?!?!. Seems too advanced/malicious for a proof of concept so probably not, but if you implement it and want to add it in then sure why not I guess.. 
 
 
 What ifs?
