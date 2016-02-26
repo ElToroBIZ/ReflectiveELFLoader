@@ -20,9 +20,9 @@
 #define GOTPLT_HASH  0xb6fb15a8
 
 //Function hashes
-#define DLOPEN_HASH 0x1
-#define DLCLOSE_HASH 0x2
-#define DLSYM_HASH 0x3
+#define DLOPEN_HASH 145572495
+#define DLCLOSE_HASH 1940953487
+#define DLSYM_HASH 3689182238
 
 __attribute__((always_inline)) unsigned int find_section_by_hash(unsigned int hash, Elf64_Shdr *sections, unsigned char *SH_STRTAB, unsigned int numSections);
 __attribute__((always_inline)) unsigned int check_elf_magic(Elf64_Ehdr *elfHdr);

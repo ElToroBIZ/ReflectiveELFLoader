@@ -26,7 +26,7 @@ crt_copy_in(int fd, void *address)
 
 	while (0 < (cc = read(fd, buf, sizeof(buf))))
 	{
-		memcpy((address + offset), buf, cc);
+		crt_memcpy((address + offset), buf, cc);
 		offset += cc;
 	}
 }
