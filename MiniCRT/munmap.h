@@ -1,9 +1,8 @@
-#ifndef READ_H
-#define READ_H 1
-
+#ifndef MUNMAP_H
+#define MUNMAP_H 1
 #include "CRT.h"
 
-__attribute__((always_inline)) int crt_read(int fd, char *buffer, unsigned long bufferlen);
+__attribute__((always_inline)) int crt_munmap(void *start, unsigned long length);
 
 #ifdef LINUX
 
@@ -17,12 +16,12 @@ __attribute__((always_inline)) int crt_read(int fd, char *buffer, unsigned long 
 
 #ifdef x86_64
 __attribute__((always_inline)) int
-crt_read(int fd, char *buffer, unsigned long bufferlen)
+crt_munmap(void *start, unsigned long length)
 {
 
 	long ret;
-	__asm__ volatile ("syscall" : "=a" (ret) : "a" (__NR_read),
-		      "D" (fd), "S" (buffer), "d" (bufferlen) :
+	asm volatile ("syscall" : "=a" (ret) : "a" (__NR_munmap),
+		      "D" (start), "S" (length) :
 		      "cc", "memory", "rcx",
 		      "r8", "r9", "r10", "r11" );
 	if (ret < 0)

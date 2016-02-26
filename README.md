@@ -3,8 +3,8 @@ Code for diskless loading of ELF Shared Library using Reflective DLL Injection
 
 Goals
 
-1. Support x86, x86_64, and ARM architectures
-2. Work on Linux and FreeBSD
+1. Support x86_64
+2. Work on Linux
 
 TODO
 

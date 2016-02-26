@@ -1,9 +1,9 @@
-#ifndef READ_H
-#define READ_H 1
-
+#ifndef CLOSE_H
+#define CLOSE_H 1
 #include "CRT.h"
 
-__attribute__((always_inline)) int crt_read(int fd, char *buffer, unsigned long bufferlen);
+int linux_close(int fd);
+
 
 #ifdef LINUX
 
@@ -16,13 +16,14 @@ __attribute__((always_inline)) int crt_read(int fd, char *buffer, unsigned long 
 	#endif
 
 #ifdef x86_64
+
 __attribute__((always_inline)) int
-crt_read(int fd, char *buffer, unsigned long bufferlen)
+crt_close(int fd)
 {
 
 	long ret;
-	__asm__ volatile ("syscall" : "=a" (ret) : "a" (__NR_read),
-		      "D" (fd), "S" (buffer), "d" (bufferlen) :
+	asm volatile ("syscall" : "=a" (ret) : "a" (__NR_close),
+		      "D" (fd):
 		      "cc", "memory", "rcx",
 		      "r8", "r9", "r10", "r11" );
 	if (ret < 0)
@@ -31,6 +32,7 @@ crt_read(int fd, char *buffer, unsigned long bufferlen)
 	}
 	return (int)ret;
 }
+
 #endif
 
 #endif
@@ -49,6 +51,7 @@ crt_read(int fd, char *buffer, unsigned long bufferlen)
 
 	#endif
 #endif
+
 
 
 #endif
