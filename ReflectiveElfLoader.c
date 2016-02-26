@@ -15,7 +15,7 @@
 #include <dlfcn.h>
 
 //Hashes of strings for comparison
-#define DYNSYM_HASH  0x2923cc52
+#define DYNSYM_HASH  853548892
 #define DYNSTR_HASH  0x32e01ec6
 #define GOTPLT_HASH  0xb6fb15a8
 
@@ -409,6 +409,13 @@ void ReflectiveLoader()
 	
 	//Find .dynsym table for libc
 	index = find_section_by_hash(DYNSYM_HASH, libcElfSections, SH_STRTAB, libcElfHeader->e_shnum);
+
+	if(index == -1)
+	{
+		printf("Did not find section..\n");
+		return;
+	}
+
 	SeclibcDynSym = (Elf64_Shdr *)&libcElfSections[index];
 	Elf64_Sym *libcDynSym = SeclibcDynSym->sh_addr + libcBaseAddr;
 	
@@ -416,15 +423,21 @@ void ReflectiveLoader()
 
 	//find .dynstr table for libc
 	index = find_section_by_hash(DYNSTR_HASH, libcElfSections, SH_STRTAB, libcElfHeader->e_shnum);
+
+	if(index == -1)
+	{
+		printf("Did not find section 2..\n");
+		return;
+	}
+
 	SeclibcDynStr = (Elf64_Shdr *)&libcElfSections[index];	
 	unsigned char *libcDYNSTR = SeclibcDynStr->sh_addr + libcBaseAddr;
 	
 	printf("dynsym is %p\n", libcDYNSTR);
 
 	//find __libc_dlopen_mode and __libc_dlsym
-	for(int i = 0; i < (SeclibcDynStr->sh_size / SeclibcDynStr->sh_entsize); i++)
+	for(int i = 0; i < (SeclibcDynSym->sh_size / SeclibcDynSym->sh_entsize); i++)
 	{
-		printf("blah! - %s\n", libcDynSym[i].st_name);
 		if(crt_hash(libcDynSym[i].st_name + libcDYNSTR) == DLOPEN_HASH)
 			__libc_dlopen_mode = libcDynSym[i].st_value + libcBaseAddr;
 		if(crt_hash(libcDynSym[i].st_name + libcDYNSTR) == DLCLOSE_HASH)
@@ -487,16 +500,18 @@ void main()
 __attribute__((always_inline)) unsigned int
 find_section_by_hash(unsigned int sectionHash, Elf64_Shdr *sections, unsigned char *SH_STRTAB, unsigned int numSections)
 {
+	printf("called\n");
 	for(int i = 0; i < numSections; i++)
 	{
 		unsigned char *sectionName = SH_STRTAB + sections[i].sh_name;
-		
+		printf("Checking name %s\n", sectionName);
 		if(crt_hash(sectionName) == sectionHash)
 		{
 			printf("found %s\n", sectionName);
 			return i;
 		}
 	}
+	return -1;
 }
 
 /* check elf header */
