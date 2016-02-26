@@ -1,56 +1,63 @@
-#include <elf.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
+#include "MiniCRT/read.h"
+#include "MiniCRT/pointer.h"
+#include "MiniCRT/mmap.h"
+#include "MiniCRT/misc.h"
+#include "MiniCRT/open.h"
+#include "MiniCRT/munmap.h"
+#include "MiniCRT/mmap.h"
+#include "MiniCRT/stat.h"
+#include "MiniCRT/lseek.h"
+#include "MiniCRT/close.h"
+#include "MiniCRT/CRT.h"
 
-#define DYNSYM_HASH 0x2923cc52
-#define DYNSTR_HASH 0x32e01ec6
-#define GOTPLT_HASH 0xb6fb15a8
+#include "ReflectiveElfLoader.h"
 
-__attribute__((always_inline)) void * memcpy(void *dest, const void *src, unsigned long n);
-__attribute__((always_inline)) uint64_t convert_to_64bit_pointer(unsigned char *x, unsigned int len);
-__attribute__((always_inline)) unsigned long strlen(const char *s);
-__attribute__((always_inline)) int linux_read(int fd, char *buffer, unsigned long bufferlen);
-__attribute__((always_inline)) int linux_open (const char *pathname, unsigned long flags, unsigned long mode);
-__attribute__((always_inline)) unsigned int hash(unsigned char *x);
-__attribute__((always_inline)) int linux_lseek(int fd, unsigned int offset, unsigned int origin);
-__attribute__((always_inline)) int linux_stat(const char *path, void *buf);
-__attribute__((always_inline)) void *linux_mmap(void *start, unsigned long length, int prot, int flags, int fd, unsigned long offset);
+#include <dlfcn.h>
+
+//Hashes of strings for comparison
+#define DYNSYM_HASH  0x2923cc52
+#define DYNSTR_HASH  0x32e01ec6
+#define GOTPLT_HASH  0xb6fb15a8
+
+//Function hashes
+#define DLOPEN_HASH 0x1
+#define DLCLOSE_HASH 0x2
+#define DLSYM_HASH 0x3
+
 __attribute__((always_inline)) unsigned int find_section_by_hash(unsigned int hash, Elf64_Shdr *sections, unsigned char *SH_STRTAB, unsigned int numSections);
 __attribute__((always_inline)) unsigned int check_elf_magic(Elf64_Ehdr *elfHdr);
 
-static void ReflectiveLoader()
+void ReflectiveLoader()
 {
-	unsigned char *IP;
+	//Important Information On Elf Binary To Be Loaded
+	Elf64_Ehdr *myElfHeader;
 	void *MyBaseAddr;
-    	unsigned char *libcBaseAddr, *libcBaseAddrEnd;
+
+	//Libc info
+	Elf64_Ehdr *libcElfHeader;
+	Elf64_Shdr *SeclibcDynSym, *SeclibcDynStr; 
+	
+	unsigned char *libcBaseAddr, *libcBaseAddrEnd;
+
 	void *libcMapped = NULL;
-	int success = 0, counter = 0;
 	unsigned char *SH_STRTAB = NULL;
 
-	unsigned char *pos = NULL, *begin = NULL, *startBaseAddr = NULL, *endBaseAddr = NULL, *perms = NULL, *libName = NULL,
-				  *startLibName = NULL;
-
-	unsigned int len = 0, index = 0;
-
-	int fd = 0, EndOfFile = 0;
-	Elf64_Ehdr *myElfHeader, *libcElfHeader;
-	Elf64_Shdr *libcGOTPLT, *libcDynSym, *libcDynStr; 
-	ssize_t r = 0;
-
-	unsigned int sectionHeaderSize;
+	//Utility variables
+	int success = 0, counter = 0;
+	int fd = 0; 
 	struct stat sb;
 
-	void *__dl_runtime_resolve;
+	//Variables String Parsing
+	unsigned char *pos = NULL, *begin = NULL, *startBaseAddr = NULL, *endBaseAddr = NULL, *perms = NULL, *libName = NULL,
+				  *startLibName = NULL;
+	unsigned int len = 0, index = 0;
+	int EndOfFile = 0;
+    ssize_t r = 0;
+	char buf[850];
+	//End String Parsing
 
 	//Done this way so relocations are not required :/ maybe there is a better way, but I know this works
 	//compiler just generates a bunch of mov instructions and writes the string onto the stack that way
-
 	char x[16];
 	x[0]  =   '/';
 	x[1]  =   'p';
@@ -75,57 +82,56 @@ static void ReflectiveLoader()
 	libcName[2] = 'b';
 	libcName[3] = 'c';
 	libcName[4] = '-';
-	libcName[5] = '\0';
-
- 	char buf[850];
+	libcName[5] = '\0'; 	
 
 	//Zero out buffer
 	for(int i = 0; i < 850; i++)
 		*(buf + i) = 0;
 
-	//Search backward in memory to ELF magic
+	//Find shared object elf header
+	unsigned char *IP;
+	#ifdef x86_64
 	__asm__("leaq (%%rip), %0;": "=r"(IP));
+	#endif
+
+	#ifdef x86
+
+	#endif
+
+	#ifdef ARM
+
+	#endif
 
 	while(true)
 	{
-		if(((Elf64_Ehdr *)IP)->e_ident[0] == 0x7f)
+		if(check_elf_magic((Elf64_Ehdr *)IP))
 		{
-			if(((Elf64_Ehdr *)IP)->e_ident[1] == 0x45)
-			{
-				if(((Elf64_Ehdr *)IP)->e_ident[2] == 0x4c)
-				{
-					if(((Elf64_Ehdr *)IP)->e_ident[3] == 0x46)
-					{
-						printf("Found elf header\n");
-						break;
-					}
-				}
-			}
-		}		
+			break;
+		}	
 		IP--;
 	}
 
 	myElfHeader = (void *)IP;
 
 	//Do a few minor checks on the ELF header
-    	if (myElfHeader->e_ident[EI_VERSION] != EV_CURRENT) 
+    if (myElfHeader->e_ident[EI_VERSION] != EV_CURRENT) 
 	{
 		return;
-        }
-        if (myElfHeader->e_type != ET_EXEC && myElfHeader->e_type != ET_DYN) 
+    }    
+	if (myElfHeader->e_type != ET_EXEC && myElfHeader->e_type != ET_DYN) 
 	{
 		return;
-    	}
+    }
 
 	//open /proc/self/maps so we can find the base address of libc
-	fd = linux_open(&x[0],  0, 0);
+	fd = crt_open(&x[0],  0, 0);
 
 	if(fd == -1)
 	{
-		return;
+		return; //open failed
 	}
 	
-	r = linux_read(fd, &buf[0], 850);
+	r = crt_read(fd, &buf[0], 850);
 
 	if(r == -1)
 	{
@@ -144,13 +150,12 @@ static void ReflectiveLoader()
 			len++;
 		}
 
-
 		if(len == 850)
 		{
 			break;	
 		}
 
-           	pos = &buf;
+        pos = &buf;
 	   	begin = pos;
 	   
 	   	//parse a single entry in the list
@@ -210,7 +215,7 @@ static void ReflectiveLoader()
 					begin++;
 
 					//check libc name against loaded module name
-					for(int b = 0; b < strlen(libcName); b++)
+					for(int b = 0; b < crt_strlen(libcName); b++)
 					{
 						if(*(begin + b) == libcName[b])
 						{	
@@ -255,7 +260,7 @@ static void ReflectiveLoader()
 			pos++;
  		}		
 
-	    	//found libc text section now we can parse it
+	    //found libc text section now we can parse it
 		if(success == 1)
 		{
 
@@ -264,9 +269,8 @@ static void ReflectiveLoader()
 			{
 				startBaseAddr++;
 			}
-
-			libcBaseAddr = (void *)convert_to_64bit_pointer(startBaseAddr, strlen(startBaseAddr));
-			libcBaseAddrEnd = (void *)convert_to_64bit_pointer(endBaseAddr, strlen(endBaseAddr));
+			libcBaseAddr = (void *)crt_convert_pointer(startBaseAddr, crt_strlen(startBaseAddr));
+			libcBaseAddrEnd = (void *)crt_convert_pointer(endBaseAddr, crt_strlen(endBaseAddr));
 			break;
 		}
 		
@@ -288,7 +292,7 @@ static void ReflectiveLoader()
 		
 		if(EndOfFile != 1) //check if we got to end of file then we don't need to read anymore data
 		{
-			r = linux_read(fd, &buf[850 - len], len);
+			r = crt_read(fd, &buf[850 - len], len);
 
 			if(r == -1)
 			{
@@ -339,9 +343,6 @@ static void ReflectiveLoader()
 		printf("Elf64_Shdr size is != to e_shentsize\n");
 		return;
 	}
-
-	//calculate size of libc Section Header
-	sectionHeaderSize = libcElfHeader->e_shnum * libcElfHeader->e_shentsize;
 	
 	//null terminate libc path
 	begin = startLibName;
@@ -356,10 +357,10 @@ static void ReflectiveLoader()
 	}	
 
 	//Close previously opened file
-	linux_close(fd);
+	close(fd);
 
 	//Open libc after getting libc path
-	fd = linux_open(startLibName,  0, 0);
+	fd = crt_open(startLibName,  0, 0);
 
 	if(fd == -1)
 	{
@@ -370,14 +371,14 @@ static void ReflectiveLoader()
 	printf("%s\n", startLibName);
 
 	//Get file size of libc
-	if (0 > linux_stat(startLibName, &sb))
+	if (0 > crt_stat(startLibName, &sb))
 	{
 		return;
 	}
 	printf("libc size is %d\n", sb.st_size);
 
 	//Create memory map to load libc file into
-	libcMapped = linux_mmap(NULL, sb.st_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+	libcMapped = crt_mmap(NULL, sb.st_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
 
 	if(libcMapped == -1)
 	{
@@ -386,8 +387,8 @@ static void ReflectiveLoader()
 	}
 
 	//Copy libc file on disk into memory map for parsing
-	copy_in(fd, libcMapped);
-	linux_close(fd);
+	crt_copy_in(fd, libcMapped);
+	crt_close(fd);
 
 	printf("libc Mapped address is %p\n", libcMapped);
 
@@ -395,38 +396,85 @@ static void ReflectiveLoader()
 	Elf64_Shdr *libcElfSections = libcMapped + libcElfHeader->e_shoff;
 	SH_STRTAB = libcMapped + libcElfSections[libcElfHeader->e_shstrndx].sh_offset;
 
-	//Find .got.plt
-	index = find_section_by_hash(GOTPLT_HASH, libcElfSections, SH_STRTAB, libcElfHeader->e_shnum);
-	libcGOTPLT = (Elf64_Shdr *)&libcElfSections[index];
+	
 
-	//Get pointer to __dl_runtime_resolve always stored in third (GOT[2]) entry in got.plt
-	//Will probably break if libc is Full RELRO?!? Ugh.. Not going to worry about that for now ^^
-	__dl_runtime_resolve;
-	memcpy(&__dl_runtime_resolve, (void *)(libcGOTPLT->sh_addr + libcBaseAddr + sizeof(void *) * 2), sizeof(void *));
-	printf("__dl_runtime_resolve is %p\n", __dl_runtime_resolve);
-    
-	printf("Found Section %s at index %d\n", (libcElfSections[index].sh_name + SH_STRTAB), index);
+	//extern void *__libc_dlsym   (void *__map, const char *__name);
+	void* (*__libc_dlsym)(void *, char *);
 
-	//Get pointer to linkmap structure (stored in GOT[1])
+	//extern void *__libc_dlopen_mode  (const char *__name, int __mode);
+	void* (*__libc_dlopen_mode)(char *, int mode);
+	
+	//extern int   __libc_dlclose (void *__map);
+	int (*__libc_dlclose)(void *);
+	
+	//Find .dynsym table for libc
+	index = find_section_by_hash(DYNSYM_HASH, libcElfSections, SH_STRTAB, libcElfHeader->e_shnum);
+	SeclibcDynSym = (Elf64_Shdr *)&libcElfSections[index];
+	Elf64_Sym *libcDynSym = SeclibcDynSym->sh_addr + libcBaseAddr;
+	
+	printf("dynsym is %p\n", libcDynSym);
 
-	//Map program segments into memory (Malloc?!?!) (TODO: map a legitimate file into memory and then hollow it out?? So we don't have RWX on the heap :P)
+	//find .dynstr table for libc
+	index = find_section_by_hash(DYNSTR_HASH, libcElfSections, SH_STRTAB, libcElfHeader->e_shnum);
+	SeclibcDynStr = (Elf64_Shdr *)&libcElfSections[index];	
+	unsigned char *libcDYNSTR = SeclibcDynStr->sh_addr + libcBaseAddr;
+	
+	printf("dynsym is %p\n", libcDYNSTR);
 
+	//find __libc_dlopen_mode and __libc_dlsym
+	for(int i = 0; i < (SeclibcDynStr->sh_size / SeclibcDynStr->sh_entsize); i++)
+	{
+		printf("blah! - %s\n", libcDynSym[i].st_name);
+		if(crt_hash(libcDynSym[i].st_name + libcDYNSTR) == DLOPEN_HASH)
+			__libc_dlopen_mode = libcDynSym[i].st_value + libcBaseAddr;
+		if(crt_hash(libcDynSym[i].st_name + libcDYNSTR) == DLCLOSE_HASH)
+			__libc_dlclose = libcDynSym[i].st_value + libcBaseAddr;
+		if(crt_hash(libcDynSym[i].st_name + libcDYNSTR) == DLSYM_HASH)
+			__libc_dlsym = libcDynSym[i].st_value + libcBaseAddr;
+	}
+
+	printf("dlopen %p\n", __libc_dlopen_mode);
+	printf("dlsym %p\n", __libc_dlsym);
+	printf("dlclose %p\n", __libc_dlclose);
+
+	if(__libc_dlsym == NULL || __libc_dlopen_mode == NULL | __libc_dlclose == NULL)
+		return;
+
+	//use these functions this to find malloc function
+	void *handle = __libc_dlopen_mode("libc.so.6", RTLD_LAZY);
+	int (*my_puts)(char *) = __libc_dlsym(handle, "puts");
+	(*my_puts)("Hello World");
+
+	//use these functions to find mprotect
+
+
+	//calculate amount of memory to allocate for segments
+
+
+	//Alloc this memory on the heap
+
+
+	//Make it RWX (living on the edge)
+
+
+	//Map program segments into memory
+
+
+	//dlopen DT_NEEDED libraries
+
+
+	//loop through resolve imported functions (in PLT)
+
+	
 	//Perform relocations on binary
 
-	//Store linkmap pointer in GOT[1] and _dl_runtime_resolve in GOT[2] of mapped program
 
 	//unmap mapped libc on disk file
 
-	//unmap self from memory?
-
-	//Transfer control to program entry point
-
-	//Pray?!?!
-
-
 	
-}
+	//Transfer control to shared object init
 
+}
 
 
 void main()
@@ -435,19 +483,23 @@ void main()
 }
 
 
+/* Find elf section given a name and hash */
 __attribute__((always_inline)) unsigned int
 find_section_by_hash(unsigned int sectionHash, Elf64_Shdr *sections, unsigned char *SH_STRTAB, unsigned int numSections)
 {
 	for(int i = 0; i < numSections; i++)
 	{
 		unsigned char *sectionName = SH_STRTAB + sections[i].sh_name;
-		if(hash(sectionName) == sectionHash)
+		
+		if(crt_hash(sectionName) == sectionHash)
 		{
+			printf("found %s\n", sectionName);
 			return i;
 		}
 	}
 }
 
+/* check elf header */
 __attribute__((always_inline)) unsigned int
 check_elf_magic(Elf64_Ehdr *elfHdr)
 {
@@ -469,204 +521,4 @@ check_elf_magic(Elf64_Ehdr *elfHdr)
 }
 
 
-__attribute__((always_inline)) int
-linux_munmap(void *start, unsigned long length)
-{
 
-	long ret;
-	asm volatile ("syscall" : "=a" (ret) : "a" (__NR_munmap),
-		      "D" (start), "S" (length) :
-		      "cc", "memory", "rcx",
-		      "r8", "r9", "r10", "r11" );
-	if (ret < 0)
-	{
-		ret = -1;
-	}
-	return (int)ret;
-}
-
-__attribute__((always_inline)) int
-linux_close(int fd)
-{
-
-	long ret;
-	asm volatile ("syscall" : "=a" (ret) : "a" (__NR_close),
-		      "D" (fd):
-		      "cc", "memory", "rcx",
-		      "r8", "r9", "r10", "r11" );
-	if (ret < 0)
-	{
-		ret = -1;
-	}
-	return (int)ret;
-}
-
-__attribute__((always_inline)) void
-copy_in(int fd, void *address)
-{
-	int cc;
-	off_t offset = 0;
-	char buf[1024];
-
-	while (0 < (cc = linux_read(fd, buf, sizeof(buf))))
-	{
-		memcpy((address + offset), buf, cc);
-		offset += cc;
-	}
-}
-
-__attribute__((always_inline)) void *
-memcpy(void *dest, const void *src, unsigned long n)
-{
-	unsigned long i;
-	unsigned char *d = (unsigned char *)dest;
-	unsigned char *s = (unsigned char *)src;
-
-	for (i = 0; i < n; ++i)
-		d[i] = s[i];
-
-	return dest;
-}
-
-__attribute__((always_inline)) uint64_t 
-convert_to_64bit_pointer(unsigned char *x, unsigned int len)
-{
-	uint64_t pointer = 0;
-	uint64_t z = 1;
-	uint64_t temp = 0;
-	unsigned int i = 0;
-
-	for(int i = 0; i < len; i++)
-		z *= 16;
-
-	for(int i = 0; i < len; i++)
-	{
-		if(*x > 60)
-		{
-			temp = *x - 87;
-		}
-		else
-		{
-			temp = *x - 48;
-		}
-
-
-		if(z == 1)
-		{
-			temp = temp;
-		}
-		else 
-		{
-			z = z / 16;
-			temp = temp * z;
-		}
-
-		pointer += temp;
-		temp = 0;
-		x++;
-	}
-
-	return pointer;
-}
-
-__attribute__((always_inline)) unsigned long
-strlen(const char *s)
-{
-	unsigned long r = 0;
-	for (; s && *s; ++s, ++r);
-	return r;
-}
-
-__attribute__((always_inline)) int
-linux_read(int fd, char *buffer, unsigned long bufferlen)
-{
-
-	long ret;
-	__asm__ volatile ("syscall" : "=a" (ret) : "a" (__NR_read),
-		      "D" (fd), "S" (buffer), "d" (bufferlen) :
-		      "cc", "memory", "rcx",
-		      "r8", "r9", "r10", "r11" );
-	if (ret < 0)
-	{
-		ret = -1;
-	}
-	return (int)ret;
-}
-
-__attribute__((always_inline)) int 
-linux_open (const char *pathname, unsigned long flags, unsigned long mode)
-{
-
-	long ret;
-	__asm__ volatile ("syscall" : "=a" (ret) : "a" (__NR_open),
-		      "D" (pathname), "S" (flags), "d" (mode) :
-		      "cc", "memory", "rcx",
-		      "r8", "r9", "r10", "r11" );
-	if (ret < 0)
-	{
-		ret = -1;
-	}
-
-	return (int) ret;
-}
-
-__attribute__((always_inline)) int 
-linux_lseek(int fd, unsigned int offset, unsigned int origin)
-{
-
-	long ret;
-	__asm__ volatile ("syscall" : "=a" (ret) : "a" (__NR_lseek),
-		      "D" (fd), "S" (offset), "d" (origin) :
-		      "cc", "memory", "rcx",
-		      "r8", "r9", "r10", "r11" );
-	if (ret < 0)
-	{
-		ret = -1;
-	}
-
-	return (int) ret;
-}
-
-__attribute__((always_inline)) unsigned int
-hash(unsigned char *word)
-{
-    unsigned int hash = 0;
-    for (int i = 0 ; word[i] != '\0' && word[i] != '@'; i++)
-    {
-        hash = 31*hash + word[i];
-    }
-    return hash;
-}
-
-
-__attribute__((always_inline)) int
-linux_stat(const char *path, void *buf)
-{
-	long ret;
-	asm volatile ("syscall" :
-		"=a" (ret) :
-		"a" (4), "D" (path), "S" (buf) :
-		"memory"
-	);
-	if (ret < 0)
-	{
-		ret = -1;
-	}
-	return (int)ret;
-}
-
-__attribute__((always_inline)) void*
-linux_mmap(void *start, unsigned long length, int prot, int flags, int fd, unsigned long offset)
-{
-	void *ret;
-	register long r10 asm("r10") = flags;
-	register long r9 asm("r9") = offset;
-	register long r8 asm("r8") = fd;
-
-	__asm__ volatile ("syscall" : "=a" (ret) : "a" (__NR_mmap),
-		      "D" (start), "S" (length), "d" (prot), "r" (r8), "r" (r9), "r" (r10) : 
-		      "cc", "memory", "rcx", "r11");
-
-	return ret;
-	
-}
