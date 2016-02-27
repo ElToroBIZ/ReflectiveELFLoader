@@ -7,6 +7,10 @@ Caveats
 
 Certain GRSecurity protections can break this is they are enabled. I have not tried to bypass these protections as I do not need to bypass them at this point in time. If, in the future, I do need to then I will find a way to bypass them and get it working on GRSecurity protected systems also.
 
+How to use this in my program?
+
+Coming soon!
+
 TODO
 
 1. Finish implementing loading portion
