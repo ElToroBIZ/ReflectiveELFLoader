@@ -1,35 +1,13 @@
 # ReflectiveELFLoader
-Code for diskless loading of ELF Shared Library using Reflective DLL Injection
+Code for diskless loading of ELF Shared Library using Reflective DLL Injection technique. Currently, this is only designed to work on x86_64 (AMD64) architecture on Linux. I was originally hoping to be able to expand this to other architectures and FreeBSD. However, I do not have time to implement this on other architectures and since I only need it to work on x86_64 on Linux this is the only portion I have implemented.
 
-Goals
+If you are interested in contributing to add support for more architectures (x86, ARM, MIPS, etc.) please contact me and I canh elp to provide guidance on this. 
 
-1. Support x86_64
-2. Work on Linux
+Caveats
+
+Certain GRSecurity protections can break this is they are enabled. I have not tried to bypass these protections as I do not need to bypass them at this point in time. If, in the future, I do need to then I will find a way to bypass them and get it working on GRSecurity protected systems also.
 
 TODO
 
-1. finish implementing loading portion (relocations, mapping program header segments, resolving symbols) for x86_64
-2. Once x86_64 is done implement on x86 and ARM 
-3. Better way to test this thing?
-4. Write junit tests for individual components
-5. find a better way to do string parsing (without C library...)
-6. clean up code general
-7. need to work on Shuriken component (its in other github repo)
-8. working on seperating code into different files (already got this done have to push it to master branch once  I test it)
-9. Write test library which uses this application
-10.Investigate differences between Linux and FreeBSD dynamic linking, etc. which could cause some issues. 
-11. Write system call wrappers for x86 and ARM
-12. Look into "What ifs?"
-13. Write some example code which compiles a shared object embeds it as an array into another program and then that program injects it into a test process, write this test along with bash script to launch it?
-14. document how things work and future improvements?
-
-EHH maybe not these.. unless someone really wants to add them in
-
-15. Investigate hollowing out another process/library and then placing code into there so heap memory is not RWX! In some places)
-16. Destroy/obfuscate elf header to prevent scanning for ELF magic, etc.?!?!?!. Seems too advanced/malicious for a proof of concept so probably not, but if you implement it and want to add it in then sure why not I guess.. 
-
-
-What ifs?
-
-1. Libc is RELRO so you can't get a pointer to _dl_runtime_resolve function? Is this likely?
-2. GRSecurity hardening restricts information in /proc/*/maps files.. just not going to worry about grsecurity for now..Aint nobody got time for compiling a custom hardened kernel anyway (at least not sane person :P)
+1. Finish implementing loading portion
+2. Start on injection portion
