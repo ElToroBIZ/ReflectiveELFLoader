@@ -361,7 +361,7 @@ void ReflectiveLoader()
 	}	
 
 	//Close previously opened file
-	close(fd);
+	crt_close(fd);
 
 	//Open libc after getting libc path
 	fd = crt_open(startLibName,  0, 0);
@@ -512,17 +512,15 @@ void ReflectiveLoader()
 		return; 
 	}
 
-	//Get file size of libc
 	if (0 > crt_stat("sample-library.so", &sb))
 	{
 		return;
 	}
 	printf("sample-target size is %d\n", sb.st_size);
 
-	//Create memory map to load libc file into
 	void *meMapped = crt_mmap(NULL, sb.st_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
 
-	if(libcMapped == -1)
+	if(meMapped == -1)
 	{
 		printf("mmap failed to create anonymous memory mapping...\n");
 		return;
@@ -627,30 +625,19 @@ void ReflectiveLoader()
 	Elf64_Shdr *myRelaPLTSec;
 	Elf64_Shdr *myRelaDynSec;
 	Elf64_Shdr *myGOTPLTSec;
-	Elf64_Shdr *myDynSymSec;
 
 	Elf64_Dyn *myDynamic; 
-
+	
 	Elf64_Rela *myRelaPLT;
 	Elf64_Rela *myRelaDyn;
+
+	Elf64_Sym *myDynSym;
 
 	void *myGOTPLT;
 
 	//Find my SH_STRTAB
 	myElfSections = (void *)myElfHeader + myElfHeader->e_shoff;
 	SH_STRTAB = (void *)myElfHeader + myElfSections[myElfHeader->e_shstrndx].sh_offset;
-
-	//Find my .dynsym table
-	index = find_section_by_hash(DYNSYM_HASH, myElfSections, SH_STRTAB, myElfHeader->e_shnum);
-
-	if(index == -1)
-	{
-		printf("Did not find section..\n");
-		return;
-	}
-
-	myDynSymSec = (Elf64_Shdr *)&libcElfSections[index];
-	Elf64_Sym *myDynSym = myDynSymSec->sh_addr + myProcessImage;
 
 	//find my .dynamic section
 	index = find_section_by_hash(DYNAMIC_HASH, myElfSections, SH_STRTAB, myElfHeader->e_shnum);
@@ -700,7 +687,7 @@ void ReflectiveLoader()
 	myRelaDynSec = (Elf64_Shdr *)&myElfSections[index];
 	myRelaDyn = myRelaDynSec->sh_addr + myProcessImage;
 
-	//find my .got.plt section
+	//find my .got.plt section TODO: MIGHT NOT BE NEEDED!
 	index = find_section_by_hash(GOTPLT_HASH, myElfSections, SH_STRTAB, myElfHeader->e_shnum);
 
 	if(index == -1)
@@ -719,6 +706,25 @@ void ReflectiveLoader()
 		{
 			myEntryPoint = myDynamic[i].d_un.d_ptr + myProcessImage;
 			printf("INIT FUNCTION AT %p\n", myEntryPoint);
+			
+		}
+	}
+
+	//find DT_SYMTAB
+	for(int i = 0; myDynamic[i].d_tag != DT_NULL; i++)
+	{
+		if(myDynamic[i].d_tag == DT_SYMTAB)
+		{
+		index = find_section_by_hash(DYNSYM_HASH, myElfSections, SH_STRTAB, myElfHeader->e_shnum);
+
+		if(index == -1)	
+		{
+			printf("Did not find section..\n");
+			return;
+		}
+
+		myDynSym = myDynamic[i].d_un.d_ptr + myProcessImage;
+		printf("DT_SYMTAB AT %p\n", myDynSym);
 			
 		}
 	}
@@ -762,9 +768,49 @@ void ReflectiveLoader()
 		}
 	}
 
-	//Resolve PLT references
-
 	//Perform relocations (.rela.dyn)
+
+
+	//Resolve PLT references
+	for(int i = 0; i < myRelaPLTSec->sh_size / sizeof(Elf64_Rela); i++)
+	{
+		if(ELF64_R_TYPE(myRelaPLT[i].r_info) == R_X86_64_JUMP_SLOT)
+		{
+			void *funcaddr;
+			char *symName;
+			//Get Index into symbol table for relocation
+			index = ELF64_R_SYM(myRelaPLT[i].r_info);
+
+			symName = myDynSym[index].st_name + myDYNSTR;
+
+			//If symbol is a local symbol write the address of it into the .got.plt
+			if(ELF64_ST_TYPE(myDynSym[index].st_info) == STT_FUNC && myDynSym[index].st_shndx != SHN_UNDEF)
+			{
+				printf("Symbol type is STT_FUNC AND st_shndx IS NOT STD_UNDEF for %s\n", symName);
+				*((unsigned long *)(myRelaPLT[i].r_offset + myProcessImage)) = (unsigned long *)(myDynSym[index].st_value + myProcessImage);
+			}
+			//We need to lookup the symbol searching through DT_NEEDED libraries
+			else 
+			{
+				for(int i = 0; i < numNeededLibraries; i++)
+				{
+					//not going to worry about __gmon_start__ https://stackoverflow.com/questions/12697081/what-is-gmon-start-symbol just don't compile with -pg flag?!?..)
+					if(crt_hash(symName) == 2390853288) //skip gmon_start entry we don't need it
+					{
+						printf("skipping gmon_start..\n");
+						continue; 
+					}
+
+					funcaddr = __libc_dlsym(handle, symName);
+					printf("Looking up symbol for %s function address is %p\n", symName, funcaddr);
+					if(funcaddr != NULL)
+					{
+						*((unsigned long *)(myRelaPLT[i].r_offset + myProcessImage)) = (unsigned long )((unsigned long)funcaddr + (unsigned long)myProcessImage);
+					}									
+				}
+			}	
+		}
+	}
 
 	//Transfer control to shared object init
 	//(*myEntryPoint)();

@@ -3,6 +3,7 @@
 #ifndef MISC_H
 #define MISC_H 1
 #include "CRT.h"
+#include "read.h"
 
 __attribute__((always_inline)) void * crt_memcpy(void *dest, const void *src, unsigned long n);
 __attribute__((always_inline)) unsigned long crt_strlen(const char *s);
@@ -24,7 +25,7 @@ crt_copy_in(int fd, void *address)
 	off_t offset = 0;
 	char buf[1024];
 
-	while (0 < (cc = read(fd, buf, sizeof(buf))))
+	while (0 < (cc = crt_read(fd, buf, sizeof(buf))))
 	{
 		crt_memcpy((address + offset), buf, cc);
 		offset += cc;
