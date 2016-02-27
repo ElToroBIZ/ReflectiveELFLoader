@@ -32,7 +32,7 @@ void ReflectiveLoader()
 	//Important Information On Elf Binary To Be Loaded
 	Elf64_Ehdr *myElfHeader;
 	void *MyBaseAddr;
-
+	
 	//Libc info
 	Elf64_Ehdr *libcElfHeader;
 	Elf64_Shdr *SeclibcDynSym, *SeclibcDynStr; 
@@ -54,7 +54,7 @@ void ReflectiveLoader()
 	int EndOfFile = 0;
     ssize_t r = 0;
 	char buf[850];
-	//End String Parsing
+	//End Variables String Parsing
 
 	//Done this way so relocations are not required :/ maybe there is a better way, but I know this works
 	//compiler just generates a bunch of mov instructions and writes the string onto the stack that way
@@ -396,8 +396,6 @@ void ReflectiveLoader()
 	Elf64_Shdr *libcElfSections = libcMapped + libcElfHeader->e_shoff;
 	SH_STRTAB = libcMapped + libcElfSections[libcElfHeader->e_shstrndx].sh_offset;
 
-	
-
 	//extern void *__libc_dlsym   (void *__map, const char *__name);
 	void* (*__libc_dlsym)(void *, char *);
 
@@ -435,7 +433,7 @@ void ReflectiveLoader()
 	
 	printf("dynsym is %p\n", libcDYNSTR);
 
-	//find __libc_dlopen_mode and __libc_dlsym
+	//find __libc_dlopen_mode and __libc_dlsym and __libc_dlclose
 	for(int i = 0; i < (SeclibcDynSym->sh_size / SeclibcDynSym->sh_entsize); i++)
 	{
 		if(crt_hash(libcDynSym[i].st_name + libcDYNSTR) == DLOPEN_HASH)
@@ -453,38 +451,170 @@ void ReflectiveLoader()
 	if(__libc_dlsym == NULL || __libc_dlopen_mode == NULL | __libc_dlclose == NULL)
 		return;
 
+	char CLIB[10];
+	CLIB[0] = 'l';
+	CLIB[1] = 'i';
+	CLIB[2] = 'b';
+	CLIB[3] = 'c';
+	CLIB[4] = '.';
+	CLIB[5] = 's';
+	CLIB[6] = 'o';
+	CLIB[7] = '.';
+	CLIB[8] = '6';
+	CLIB[9] = '\0';
+
+	char calloc_s[7];
+	calloc_s[0] = 'c';
+	calloc_s[1] = 'a';
+	calloc_s[2] = 'l';
+	calloc_s[3] = 'l';
+	calloc_s[4] = 'o';
+	calloc_s[5] = 'c';
+	calloc_s[6] = '\0';
+
+	char mprotect_s[8];
+	mprotect_s[0] = 'm';
+	mprotect_s[1] = 'p';
+	mprotect_s[2] = 'r';
+	mprotect_s[3] = 'o';
+	mprotect_s[4] = 't';
+	mprotect_s[5] = 'e';
+	mprotect_s[6] = 'c';
+	mprotect_s[7] = 't';
+	mprotect_s[8] = '\0';
+
 	//use these functions this to find malloc function
-	void *handle = __libc_dlopen_mode("libc.so.6", RTLD_LAZY);
+	void *handle = __libc_dlopen_mode(&CLIB, RTLD_LAZY);
+
+    if (!handle) {
+		printf("Invalid Handle\n");
+		return;
+	}
+
 	int (*my_puts)(char *) = __libc_dlsym(handle, "puts");
 	(*my_puts)("Hello World");
 
-	//use these functions to find mprotect
+	//Resolve mprotect function using dlsym
+	int (*libc_mprotect)(void *addr, size_t len, int prot) = __libc_dlsym(handle, &mprotect_s);
+	
+	//Resolve malloc function using dlsym
+	void* (*libc_calloc)(size_t, size_t size) = __libc_dlsym(handle, &calloc_s);
 
+/* DEBUG TO TEST LOADING CAPABILITIES WE JUST MAP IN FILE FROM DISK (NOT TESTING INJECTION ATM SO I CAN USE PRINTF!!!) */
+	fd = crt_open("sample-library.so",  0, 0);
+	if(fd == -1)
+	{
+		printf("Failed to open SAMPLE target");
+		return; 
+	}
+
+	//Get file size of libc
+	if (0 > crt_stat("sample-library.so", &sb))
+	{
+		return;
+	}
+	printf("sample-target size is %d\n", sb.st_size);
+
+	//Create memory map to load libc file into
+	void *meMapped = crt_mmap(NULL, sb.st_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+
+	if(libcMapped == -1)
+	{
+		printf("mmap failed to create anonymous memory mapping...\n");
+		return;
+	}
+
+	//Copy libc file on disk into memory map for parsing
+	crt_copy_in(fd, meMapped);
+	crt_close(fd);
+
+	printf("DEBUG SAMPLE TARGET Mapped address is %p\n", meMapped);
+
+	myElfHeader = (Elf64_Ehdr *)meMapped;
+
+	if(!check_elf_magic(myElfHeader))
+	{
+		printf("DEBUG SAMPLE TARGET ELF MAGIC ERROR!!!");
+		return;
+	}
+/* DEBUG */
 
 	//calculate amount of memory to allocate for segments
+	unsigned int size = 0, numPages; 
+	Elf64_Phdr *segments = myElfHeader->e_phoff + (void *)myElfHeader;
 
+	printf("number of program headers is %d\n", myElfHeader->e_phnum);
 
+	for(int i = 0; i < myElfHeader->e_phnum; i++)
+	{
+		if(segments[i].p_type == PT_LOAD)
+		{
+			printf("Found PT_LOAD Segment\n");
+
+			if(segments[i].p_memsz > segments[i].p_align)
+			{
+				numPages = 1 + (segments[i].p_memsz - segments[i].p_memsz % segments[i].p_align) / segments[i].p_align;
+			}			
+			else
+			{
+				numPages = 1;
+			}				
+			
+			size += segments[i].p_align * numPages;
+			printf("number of program align size pages is %d\n", numPages);
+		}
+
+	}
+
+	printf("FINAL module memory size is %08x\n", size);
+
+	size += 0x2000; //padding
+	
 	//Alloc this memory on the heap
+	void *myProcessImage = (*libc_calloc)(1, size);
+	
+	if(myProcessImage == NULL)
+	{
+		printf("Failed to malloc memory to load process\n");
+		return;
+	}
 
+	printf("Allocated memory for shared object at %p\n", myProcessImage);
+	unsigned long temp = (unsigned long)myProcessImage & 0x00000FFF;
+	myProcessImage += (0x1000 - temp);
+	printf("Process base address is at %p\n", myProcessImage);
 
-	//Make it RWX (living on the edge)
+	//Make it RWX
+	r = (*libc_mprotect)(myProcessImage, size - (0x1000 - temp), PROT_READ | PROT_WRITE | PROT_EXEC);
 
+	if(r != 0)
+	{
+		printf("Call to mprotect failed returned %d\n", r);
+		return;
+	}
+
+	printf("Mapping program segments into memory\n");
 
 	//Map program segments into memory
+	for(int i = 0; i < myElfHeader->e_phnum; i++)
+	{
+		if(segments[i].p_type == PT_LOAD)
+		{
+			
+		}
 
+	}
+
+	//find my .dynamic section
 
 	//dlopen DT_NEEDED libraries
 
+	//resolve PLT entries (.rela.plt)
 
-	//loop through resolve imported functions (in PLT)
+	//Perform relocations (.rela.dyn)
 
-	
-	//Perform relocations on binary
+	//TODO: unmap mapped libc on disk file TODO: DLCLOSE HANDLE AND FREE ANY MEMORY ETC
 
-
-	//unmap mapped libc on disk file
-
-	
 	//Transfer control to shared object init
 
 }
