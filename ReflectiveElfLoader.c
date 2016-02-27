@@ -14,10 +14,14 @@
 
 #include <dlfcn.h>
 
-//Hashes of strings for comparison
+//Section Name Hashes
 #define DYNSYM_HASH  853548892
 #define DYNSTR_HASH  0x32e01ec6
 #define GOTPLT_HASH  0xb6fb15a8
+
+#define RELAPLT_HASH 2199925792
+#define RELADYN_HASH 2199914657
+#define DYNAMIC_HASH 689664081
 
 //Function hashes
 #define DLOPEN_HASH 145572495
@@ -598,24 +602,176 @@ void ReflectiveLoader()
 	//Map program segments into memory
 	for(int i = 0; i < myElfHeader->e_phnum; i++)
 	{
+		//Copy loadable segments into memory
 		if(segments[i].p_type == PT_LOAD)
 		{
-			
+			printf("PT_LOAD Segment loaded at %p\n", segments[i].p_vaddr + myProcessImage);
+			crt_memcpy(myProcessImage + segments[i].p_vaddr, (void *)myElfHeader + segments[i].p_offset, segments[i].p_filesz);
 		}
 
 	}
 
+	if(!check_elf_magic((Elf64_Ehdr *)myProcessImage))
+	{
+		printf("ELF MAGIC ERROR!!!\n");
+		return;
+	}
+
+	//Important Information On Shared Object that is being loaded into memory
+	void (*myEntryPoint)();	
+	unsigned char *myDYNSTR;
+
+	Elf64_Shdr *myElfSections;
+	Elf64_Shdr *myDynamicSec;
+	Elf64_Shdr *myDynStrSec;
+	Elf64_Shdr *myRelaPLTSec;
+	Elf64_Shdr *myRelaDynSec;
+	Elf64_Shdr *myGOTPLTSec;
+	Elf64_Shdr *myDynSymSec;
+
+	Elf64_Dyn *myDynamic; 
+
+	Elf64_Rela *myRelaPLT;
+	Elf64_Rela *myRelaDyn;
+
+	void *myGOTPLT;
+
+	//Find my SH_STRTAB
+	myElfSections = (void *)myElfHeader + myElfHeader->e_shoff;
+	SH_STRTAB = (void *)myElfHeader + myElfSections[myElfHeader->e_shstrndx].sh_offset;
+
+	//Find my .dynsym table
+	index = find_section_by_hash(DYNSYM_HASH, myElfSections, SH_STRTAB, myElfHeader->e_shnum);
+
+	if(index == -1)
+	{
+		printf("Did not find section..\n");
+		return;
+	}
+
+	myDynSymSec = (Elf64_Shdr *)&libcElfSections[index];
+	Elf64_Sym *myDynSym = myDynSymSec->sh_addr + myProcessImage;
+
 	//find my .dynamic section
+	index = find_section_by_hash(DYNAMIC_HASH, myElfSections, SH_STRTAB, myElfHeader->e_shnum);
+
+	if(index == -1)
+	{
+		printf("Did not find section..\n");
+		return;
+	}
+
+	myDynamicSec = (Elf64_Shdr *)&myElfSections[index];
+	myDynamic = myDynamicSec->sh_addr + myProcessImage;
+
+	//find my .dynstr
+	index = find_section_by_hash(DYNSTR_HASH, myElfSections, SH_STRTAB, myElfHeader->e_shnum);
+
+	if(index == -1)
+	{
+		printf("Did not find section..\n");
+		return;
+	}
+
+	myDynStrSec = (Elf64_Shdr *)&myElfSections[index];
+	myDYNSTR = myDynStrSec->sh_addr + myProcessImage;
+
+	//find my .rela.plt section
+	index = find_section_by_hash(RELAPLT_HASH, myElfSections, SH_STRTAB, myElfHeader->e_shnum);
+
+	if(index == -1)
+	{
+		printf("Did not find section..\n");
+		return;
+	}
+
+	myRelaPLTSec = (Elf64_Shdr *)&myElfSections[index];
+	myRelaPLT = myRelaPLTSec->sh_addr + myProcessImage;
+
+	//find my .rela.dyn section
+	index = find_section_by_hash(RELADYN_HASH, myElfSections, SH_STRTAB, myElfHeader->e_shnum);
+
+	if(index == -1)
+	{
+		printf("Did not find section..\n");
+		return;
+	}
+
+	myRelaDynSec = (Elf64_Shdr *)&myElfSections[index];
+	myRelaDyn = myRelaDynSec->sh_addr + myProcessImage;
+
+	//find my .got.plt section
+	index = find_section_by_hash(GOTPLT_HASH, myElfSections, SH_STRTAB, myElfHeader->e_shnum);
+
+	if(index == -1)
+	{
+		printf("Did not find section..\n");
+		return;
+	}
+
+	myGOTPLTSec = (Elf64_Shdr *)&myElfSections[index];
+	myGOTPLT = myGOTPLTSec->sh_addr + myProcessImage;
+
+	//find DT_INIT (entrypoint)
+	for(int i = 0; myDynamic[i].d_tag != DT_NULL; i++)
+	{
+		if(myDynamic[i].d_tag == DT_INIT)
+		{
+			myEntryPoint = myDynamic[i].d_un.d_ptr + myProcessImage;
+			printf("INIT FUNCTION AT %p\n", myEntryPoint);
+			
+		}
+	}
 
 	//dlopen DT_NEEDED libraries
+	unsigned int numNeededLibraries = 0;
+	unsigned int* libHandles = NULL; //hope this doesn't break stuff compiler was complaining so I made it shut up by making void * to unsigned int *..
+	unsigned int z = 0;
 
-	//resolve PLT entries (.rela.plt)
+	//Count number of DT_NEEDED entries
+	for(int i = 0; myDynamic[i].d_tag != DT_NULL; i++)
+	{
+		if(myDynamic[i].d_tag == DT_NEEDED)
+		{
+			numNeededLibraries++;
+			printf("DT_NEEDED %s\n", myDynamic[i].d_un.d_ptr + myDYNSTR);
+		}
+	}
+
+	libHandles = (*libc_calloc)(sizeof(void *), numNeededLibraries);
+
+	if(libHandles == NULL)
+	{
+		printf("calloc returned null...\n");
+		return;
+	}
+
+	//Open all libraries required by the shared object in order to execute
+	for(int i = 0; myDynamic[i].d_tag != DT_NULL && z < numNeededLibraries; i++)
+	{
+		if(myDynamic[i].d_tag == DT_NEEDED)
+		{
+			libHandles[z] = __libc_dlopen_mode(myDynamic[i].d_un.d_ptr + myDYNSTR, RTLD_LAZY);
+			printf("opened library %p\n", libHandles[z]);
+			if(!libHandles[z])
+			{
+				printf("Failed to open library %s\n", myDynamic[i].d_un.d_ptr + myDYNSTR);
+			}
+
+			z++;
+		}
+	}
+
+	//Resolve PLT references
 
 	//Perform relocations (.rela.dyn)
 
-	//TODO: unmap mapped libc on disk file TODO: DLCLOSE HANDLE AND FREE ANY MEMORY ETC
-
 	//Transfer control to shared object init
+	//(*myEntryPoint)();
+
+	//Should never get here should probably clean up the stack though... 
+	//TODO: Better cleanup? Going to wait until I design injection to figure this out might just save registers and restore after injection?
+	//TODO: unmap mapped libc on disk file TODO: DLCLOSE HANDLE AND FREE ANY MEMORY ETC
 
 }
 
