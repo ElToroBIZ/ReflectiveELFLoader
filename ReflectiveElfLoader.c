@@ -769,8 +769,151 @@ void ReflectiveLoader()
 	}
 
 	//Perform relocations (.rela.dyn)
-
-
+	for(int i = 0; i < myRelaDynSec->sh_size / sizeof(Elf64_Rela); i++)
+	{
+		//Cannot use switch because compiler might generate a jump table
+		//Page 72 of http://www.x86-64.org/documentation/abi.pdf
+		if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_NONE)
+		{
+			//TODO: Implement if needed
+		} 
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_64)
+		{
+			printf("Professing Relocation of Type R_x86_64_64 for %s ", myDynSym[ELF64_R_SYM(myRelaDyn[i].r_info)].st_name + myDYNSTR);
+			index = ELF64_R_SYM(myRelaDyn[i].r_info);
+			*((uint64_t *) (myRelaDyn[i].r_offset + myProcessImage)) = myDynSym[index].st_value + myRelaDyn[i].r_addend;
+			printf("with index %d and value of %08x\n", index, myDynSym[index].st_value);
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_PC32)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_GOT32)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_PLT32)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_COPY)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_GLOB_DAT)
+		{
+			printf("Professing Relocation of Type R_x86_64_GLOB_DAT for %s\n", myDynSym[ELF64_R_SYM(myRelaDyn[i].r_info)].st_name + myDYNSTR);
+			//TODO: Implement ITS NEEDED!!
+			
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_JUMP_SLOT)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_RELATIVE)
+		{
+			printf("Professing Relocation of Type R_x86_64_RELATIVE for %s\n", myDynSym[ELF64_R_SYM(myRelaDyn[i].r_info)].st_name + myDYNSTR);
+			index = ELF64_R_SYM(myRelaDyn[i].r_info);
+			*((uint64_t *) (myRelaDyn[i].r_offset + myProcessImage)) = myDynSym[index].st_value;
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_GOTPCREL)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_32)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_32S)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_16)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_PC16)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_8)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_PC8)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_DTPMOD64)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_DTPOFF64)
+		{
+			//TODO: Implement if needed
+		}	
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_TPOFF64)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_TLSGD)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_TLSLD)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_DTPOFF32)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_GOTTPOFF)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_TPOFF32)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_PC64)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_GOTOFF64)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_GOTPC32)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_SIZE32)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_SIZE64)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_GOTPC32_TLSDESC)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_TLSDESC_CALL)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_TLSDESC)
+		{
+			//TODO: Implement if needed
+		}
+		else if(ELF64_R_TYPE(myRelaDyn[i].r_info) == R_X86_64_IRELATIVE)
+		{
+			//TODO: Implement if needed
+		}
+	}
+	
 	//Resolve PLT references
 	for(int i = 0; i < myRelaPLTSec->sh_size / sizeof(Elf64_Rela); i++)
 	{
@@ -789,23 +932,27 @@ void ReflectiveLoader()
 				printf("Symbol type is STT_FUNC AND st_shndx IS NOT STD_UNDEF for %s\n", symName);
 				*((unsigned long *)(myRelaPLT[i].r_offset + myProcessImage)) = (unsigned long *)(myDynSym[index].st_value + myProcessImage);
 			}
+			//TODO: I think I know how to handle gmon_start
 			//We need to lookup the symbol searching through DT_NEEDED libraries
 			else 
 			{
-				for(int i = 0; i < numNeededLibraries; i++)
+				for(int x = 0; x < numNeededLibraries; x++)
 				{
 					//not going to worry about __gmon_start__ https://stackoverflow.com/questions/12697081/what-is-gmon-start-symbol just don't compile with -pg flag?!?..)
 					if(crt_hash(symName) == 2390853288) //skip gmon_start entry we don't need it
 					{
 						printf("skipping gmon_start..\n");
-						continue; 
+						break; 
 					}
-
+	
+					//TODO: Close handle for handle and use libHandles array
 					funcaddr = __libc_dlsym(handle, symName);
 					printf("Looking up symbol for %s function address is %p\n", symName, funcaddr);
 					if(funcaddr != NULL)
 					{
-						*((unsigned long *)(myRelaPLT[i].r_offset + myProcessImage)) = (unsigned long )((unsigned long)funcaddr + (unsigned long)myProcessImage);
+						*((unsigned long *)(myRelaPLT[i].r_offset + myProcessImage)) = (unsigned long )((unsigned long)funcaddr);
+						printf("Wrote %p to %p\n", funcaddr, (unsigned long *)(myRelaPLT[i].r_offset + myProcessImage));
+						break;
 					}									
 				}
 			}	
@@ -813,7 +960,11 @@ void ReflectiveLoader()
 	}
 
 	//Transfer control to shared object init
-	//(*myEntryPoint)();
+
+	//TODO: Find actual entrypoint constructor somehow? because __init does not seem to be it! probably a structure that needs to be parsed to find the constructor
+	myEntryPoint = myProcessImage + 0x712;
+	printf("Transfering control to entry point! %p\n", myEntryPoint);
+	myEntryPoint();
 
 	//Should never get here should probably clean up the stack though... 
 	//TODO: Better cleanup? Going to wait until I design injection to figure this out might just save registers and restore after injection?
@@ -832,14 +983,14 @@ void main()
 __attribute__((always_inline)) unsigned int
 find_section_by_hash(unsigned int sectionHash, Elf64_Shdr *sections, unsigned char *SH_STRTAB, unsigned int numSections)
 {
-	printf("called\n");
+	//printf("called\n");
 	for(int i = 0; i < numSections; i++)
 	{
 		unsigned char *sectionName = SH_STRTAB + sections[i].sh_name;
-		printf("Checking name %s\n", sectionName);
+		//printf("Checking name %s\n", sectionName);
 		if(crt_hash(sectionName) == sectionHash)
 		{
-			printf("found %s\n", sectionName);
+		//	printf("found %s\n", sectionName);
 			return i;
 		}
 	}
