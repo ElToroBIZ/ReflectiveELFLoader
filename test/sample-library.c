@@ -10,7 +10,7 @@
 
 void hello()
 {
-	printf("ELF Loader Module Works!\n");
+	printf("Hello World! :)\n");
 }
 
 /*

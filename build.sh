@@ -1,0 +1,1 @@
+xxd -i $NAME
